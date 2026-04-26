@@ -1,49 +1,39 @@
-const express = require('express');
-const multer = require('multer');
-const dotenv = require('dotenv');
-const path = require('path');
-
+import dotenv from "dotenv";
 dotenv.config();
 
+import express from "express";
+import multer from "multer";
+
+import { loadPDF } from "./utils/pdfLoader.js";
+import { splitText } from "./utils/splitter.js";
+import { createVectorStore } from "./utils/vectorStore.js";
+import { askQuestion } from "./utils/ask.js";
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const upload = multer({ dest: "uploads/" });
 
-// Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+let retriever; // global
+
+// Upload PDF
+app.post("/upload", upload.single("file"), async (req, res) => {
+  const text = await loadPDF(req.file.path);
+  const docs = await splitText(text);
+  const store = await createVectorStore(docs);
+
+  retriever = store.asRetriever();
+
+  res.send("PDF processed");
 });
 
-const upload = multer({ storage });
+// Ask question
+app.post("/ask", async (req, res) => {
+  const { question } = req.body;
 
-// Routes
-app.get('/', (req, res) => {
-  res.json({ message: 'PDF QA Bot API is running' });
+  const answer = await askQuestion(question, retriever);
+
+  res.json({ answer });
 });
 
-// Import routes
-const pdfRoutes = require('./routes/pdf');
-const askRoutes = require('./routes/ask');
-
-app.use('/api/pdf', pdfRoutes);
-app.use('/api/ask', askRoutes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
-});
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
-module.exports = app;
+app.listen(3000, () => console.log("Server running"));
