@@ -8,7 +8,6 @@ export async function createVectorStore(docs) {
     const embeddings = new HuggingFaceTransformersEmbeddings({
       modelName: "Xenova/all-MiniLM-L6-v2",
     });
-
     const store = await FaissStore.fromDocuments(docs, embeddings);
 
     console.log("Embeddings done ✅");
